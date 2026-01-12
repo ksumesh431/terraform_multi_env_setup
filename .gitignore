@@ -1,0 +1,47 @@
+# =============================================================================
+# GITIGNORE - Terraform Project
+# =============================================================================
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Terraform plan files
+*.tfplan
+*.out
+
+# Terraform directory
+.terraform/
+.terraform.lock.hcl
+
+# Sensitive variable files
+*.tfvars
+!example.tfvars
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Editor/IDE files
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated graphs
+*-graph.png
+
+# Local backend state
+terraform.tfstate.d/

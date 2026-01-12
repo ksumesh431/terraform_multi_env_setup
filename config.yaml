@@ -1,0 +1,500 @@
+# =============================================================================
+# CONFIG.YAML - SINGLE SOURCE OF TRUTH
+# =============================================================================
+# This file contains ALL configuration values for ALL environments.
+# Modify values here to customize deployments across regions and tenants.
+# =============================================================================
+
+project_name: sei-platform
+
+# =============================================================================
+# COMMON TAGS
+# =============================================================================
+# Applied to all resources across all environments
+common_tags:
+  Project: sei-platform
+  ManagedBy: Terraform
+  IaC: "true"
+  
+
+# =============================================================================
+# ENVIRONMENTS
+# =============================================================================
+environments:
+
+  # ---------------------------------------------------------------------------
+  # US REGION - Multi-tenant shared infrastructure
+  # ---------------------------------------------------------------------------
+  us:
+    aws_region: us-east-1
+    environment: production
+    is_gdpr_region: false
+    tenant_type: multi-tenant
+    compliance_tags: {}
+
+    # -------------------------------------------------------------------------
+    # VPC CONFIGURATION
+    # -------------------------------------------------------------------------
+    vpc:
+      cidr: "10.0.0.0/16"
+      azs:
+        - us-east-1a
+        - us-east-1b
+        - us-east-1c
+      private_subnets:
+        - "10.0.1.0/24"
+        - "10.0.2.0/24"
+        - "10.0.3.0/24"
+      public_subnets:
+        - "10.0.101.0/24"
+        - "10.0.102.0/24"
+        - "10.0.103.0/24"
+      database_subnets:
+        - "10.0.201.0/24"
+        - "10.0.202.0/24"
+        - "10.0.203.0/24"
+      # NAT Gateway configuration
+      enable_nat_gateway: true
+      single_nat_gateway: false  # HA: one per AZ
+      one_nat_gateway_per_az: true
+      # DNS settings
+      enable_dns_hostnames: true
+      enable_dns_support: true
+      # Database subnet group
+      create_database_subnet_group: true
+      create_database_subnet_route_table: true
+
+    # -------------------------------------------------------------------------
+    # EKS CONFIGURATION
+    # -------------------------------------------------------------------------
+    eks:
+      # Cluster version
+      cluster_version: "1.34"
+      # Endpoint access
+      cluster_endpoint_public_access: true
+      cluster_endpoint_private_access: true
+      cluster_endpoint_public_access_cidrs:
+        - "0.0.0.0/0"
+      # Logging
+      cluster_enabled_log_types:
+        - api
+        - audit
+        - authenticator
+        - controllerManager
+        - scheduler
+      cluster_log_retention_in_days: 90
+      # Encryption
+      cluster_encryption_config: true
+      kms_key_deletion_window_in_days: 30
+      # IRSA (IAM Roles for Service Accounts)
+      enable_irsa: true
+      # Pod Identity
+      enable_pod_identity_agent: true
+      # Authentication
+      authentication_mode: API_AND_CONFIG_MAP
+      bootstrap_cluster_creator_admin_permissions: true
+      # Addons
+      cluster_addons:
+        coredns:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        kube-proxy:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        vpc-cni:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        aws-ebs-csi-driver:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        eks-pod-identity-agent:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+      # Node groups
+      node_groups:
+        main:
+          min_size: 1
+          max_size: 10
+          desired_size: 1
+          instance_types:
+            - t3.large
+          capacity_type: ON_DEMAND
+          ami_type: AL2023_x86_64_STANDARD
+          disk_size: 50
+          disk_type: gp3
+          disk_encrypted: true
+          labels:
+            Environment: production
+            NodeType: general
+          taints: []
+          # IMDSv2 enforcement
+          http_endpoint: enabled
+          http_tokens: required
+          http_put_response_hop_limit: 1
+          use_custom_launch_template: true
+          max_unavailable: 1
+      # Additional security group rules
+      cluster_security_group_additional_rules: {}
+      node_security_group_additional_rules: {}
+
+    # -------------------------------------------------------------------------
+    # RDS POSTGRESQL CONFIGURATION
+    # -------------------------------------------------------------------------
+    rds:
+      engine: postgres
+      engine_version: "17.6"
+      family: postgres17
+      major_engine_version: "17"
+      instance_class: db.t3.large
+      allocated_storage: 100
+      max_allocated_storage: 500  # Autoscaling limit
+      storage_type: gp3
+      # Database settings
+      db_name: app
+      db_username: dbadmin
+      db_port: 5432
+      # High availability
+      multi_az: true
+      # Backup configuration
+      backup_retention_period: 7
+      backup_window: "03:00-04:00"
+      maintenance_window: "Mon:04:00-Mon:05:00"
+      skip_final_snapshot: false
+      # Security
+      storage_encrypted: true
+      deletion_protection: true
+      # Monitoring
+      performance_insights_enabled: true
+      monitoring_interval: 60
+      # Parameter group settings
+      parameters:
+        - name: log_connections
+          value: "1"
+        - name: log_disconnections
+          value: "1"
+
+    # -------------------------------------------------------------------------
+    # SQS CONFIGURATION
+    # -------------------------------------------------------------------------
+    sqs:
+      queues:
+        - orders
+        - notifications
+        - events
+      visibility_timeout_seconds: 30
+      message_retention_seconds: 1209600  # 14 days
+      receive_wait_time_seconds: 10       # Long polling
+      sqs_managed_sse_enabled: true       # Encryption at rest
+      # Dead letter queue settings (optional)
+      create_dlq: false
+      dlq_message_retention_seconds: 1209600
+      redrive_max_receive_count: 3
+
+  # ---------------------------------------------------------------------------
+  # EU REGION - GDPR-isolated infrastructure
+  # ---------------------------------------------------------------------------
+  # IMPORTANT: This region is completely isolated for GDPR compliance.
+  # No data (databases, queues, logs) should flow outside eu-west-1.
+  eu:
+    aws_region: eu-west-1
+    environment: production
+    is_gdpr_region: true
+    tenant_type: multi-tenant
+    compliance_tags:
+      Compliance: GDPR
+      DataResidency: EU
+      DataClassification: PII
+
+    # -------------------------------------------------------------------------
+    # VPC CONFIGURATION
+    # -------------------------------------------------------------------------
+    vpc:
+      cidr: "10.1.0.0/16"
+      azs:
+        - eu-west-1a
+        - eu-west-1b
+        - eu-west-1c
+      private_subnets:
+        - "10.1.1.0/24"
+        - "10.1.2.0/24"
+        - "10.1.3.0/24"
+      public_subnets:
+        - "10.1.101.0/24"
+        - "10.1.102.0/24"
+        - "10.1.103.0/24"
+      database_subnets:
+        - "10.1.201.0/24"
+        - "10.1.202.0/24"
+        - "10.1.203.0/24"
+      enable_nat_gateway: true
+      single_nat_gateway: false
+      one_nat_gateway_per_az: true
+      enable_dns_hostnames: true
+      enable_dns_support: true
+      create_database_subnet_group: true
+      create_database_subnet_route_table: true
+
+    # -------------------------------------------------------------------------
+    # EKS CONFIGURATION
+    # -------------------------------------------------------------------------
+    eks:
+      cluster_version: "1.34"
+      cluster_endpoint_public_access: true
+      cluster_endpoint_private_access: true
+      cluster_endpoint_public_access_cidrs:
+        - "0.0.0.0/0"
+      cluster_enabled_log_types:
+        - api
+        - audit
+        - authenticator
+        - controllerManager
+        - scheduler
+      cluster_log_retention_in_days: 365  # GDPR: Extended log retention
+      cluster_encryption_config: true
+      kms_key_deletion_window_in_days: 30
+      enable_irsa: true
+      enable_pod_identity_agent: true
+      authentication_mode: API_AND_CONFIG_MAP
+      bootstrap_cluster_creator_admin_permissions: true
+      cluster_addons:
+        coredns:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        kube-proxy:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        vpc-cni:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        aws-ebs-csi-driver:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        eks-pod-identity-agent:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+      node_groups:
+        main:
+          min_size: 1
+          max_size: 10
+          desired_size: 1
+          instance_types:
+            - t3.large
+          capacity_type: ON_DEMAND
+          ami_type: AL2023_x86_64_STANDARD
+          disk_size: 50
+          disk_type: gp3
+          disk_encrypted: true
+          labels:
+            Environment: production
+            NodeType: general
+            Compliance: GDPR
+          taints: []
+          http_endpoint: enabled
+          http_tokens: required
+          http_put_response_hop_limit: 1
+          use_custom_launch_template: true
+          max_unavailable: 1
+      cluster_security_group_additional_rules: {}
+      node_security_group_additional_rules: {}
+
+    # -------------------------------------------------------------------------
+    # RDS POSTGRESQL CONFIGURATION - GDPR
+    # -------------------------------------------------------------------------
+    rds:
+      engine: postgres
+      engine_version: "17.6"
+      family: postgres17
+      major_engine_version: "17"
+      instance_class: db.t3.large
+      allocated_storage: 100
+      max_allocated_storage: 500
+      storage_type: gp3
+      db_name: app
+      db_username: dbadmin
+      db_port: 5432
+      multi_az: true
+      # GDPR: Extended backup retention
+      backup_retention_period: 30
+      backup_window: "03:00-04:00"
+      maintenance_window: "Mon:04:00-Mon:05:00"
+      skip_final_snapshot: false
+      # GDPR: Must be encrypted
+      storage_encrypted: true
+      deletion_protection: true
+      performance_insights_enabled: true
+      monitoring_interval: 60
+      parameters:
+        - name: log_connections
+          value: "1"
+        - name: log_disconnections
+          value: "1"
+
+    # -------------------------------------------------------------------------
+    # SQS CONFIGURATION - GDPR
+    # -------------------------------------------------------------------------
+    sqs:
+      queues:
+        - orders
+        - notifications
+        - events
+      visibility_timeout_seconds: 30
+      message_retention_seconds: 1209600
+      receive_wait_time_seconds: 10
+      sqs_managed_sse_enabled: true
+      # GDPR: No cross-region replication configured
+      create_dlq: false
+      dlq_message_retention_seconds: 1209600
+      redrive_max_receive_count: 3
+
+  # ---------------------------------------------------------------------------
+  # SINGLE-TENANT: ACME Corporation - Enterprise
+  # ---------------------------------------------------------------------------
+  # Each single-tenant customer gets fully isolated infrastructure:
+  # - Dedicated VPC (no shared networking)
+  # - Dedicated EKS cluster
+  # - Dedicated RDS instance
+  # - Dedicated SQS queues
+  single-tenant-acme:
+    aws_region: us-east-1
+    environment: dedicated
+    is_gdpr_region: false
+    tenant_type: single-tenant
+    tenant_id: acme-corp
+    display_name: ACME Corporation
+    compliance_tags:
+      Customer: ACME Corporation
+      ContractTier: Enterprise
+
+    # -------------------------------------------------------------------------
+    # VPC CONFIGURATION - Cost optimized for single tenant
+    # -------------------------------------------------------------------------
+    vpc:
+      cidr: "10.100.0.0/16"
+      azs:
+        - us-east-1a
+        - us-east-1b
+      private_subnets:
+        - "10.100.1.0/24"
+        - "10.100.2.0/24"
+      public_subnets:
+        - "10.100.101.0/24"
+        - "10.100.102.0/24"
+      database_subnets:
+        - "10.100.201.0/24"
+        - "10.100.202.0/24"
+      enable_nat_gateway: true
+      single_nat_gateway: true  # Cost optimization for single tenant
+      one_nat_gateway_per_az: false
+      enable_dns_hostnames: true
+      enable_dns_support: true
+      create_database_subnet_group: true
+      create_database_subnet_route_table: true
+
+    # -------------------------------------------------------------------------
+    # EKS CONFIGURATION - Dedicated resources
+    # -------------------------------------------------------------------------
+    eks:
+      cluster_version: "1.34"
+      cluster_endpoint_public_access: true
+      cluster_endpoint_private_access: true
+      cluster_endpoint_public_access_cidrs:
+        - "0.0.0.0/0"
+      cluster_enabled_log_types:
+        - api
+        - audit
+        - authenticator
+        - controllerManager
+        - scheduler
+      cluster_log_retention_in_days: 90
+      cluster_encryption_config: true
+      kms_key_deletion_window_in_days: 30
+      enable_irsa: true
+      enable_pod_identity_agent: true
+      authentication_mode: API_AND_CONFIG_MAP
+      bootstrap_cluster_creator_admin_permissions: true
+      cluster_addons:
+        coredns:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        kube-proxy:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        vpc-cni:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        aws-ebs-csi-driver:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+        eks-pod-identity-agent:
+          resolve_conflicts_on_create: OVERWRITE
+          resolve_conflicts_on_update: OVERWRITE
+      node_groups:
+        dedicated:
+          min_size: 1
+          max_size: 5
+          desired_size: 1
+          instance_types:
+            - t3.xlarge  # Larger for dedicated tenant
+          capacity_type: ON_DEMAND
+          ami_type: AL2023_x86_64_STANDARD
+          disk_size: 100
+          disk_type: gp3
+          disk_encrypted: true
+          labels:
+            Environment: dedicated
+            NodeType: single-tenant
+          taints: []
+          http_endpoint: enabled
+          http_tokens: required
+          http_put_response_hop_limit: 1
+          use_custom_launch_template: true
+          max_unavailable: 1
+      cluster_security_group_additional_rules: {}
+      node_security_group_additional_rules: {}
+
+    # -------------------------------------------------------------------------
+    # RDS POSTGRESQL CONFIGURATION - Cost optimized
+    # -------------------------------------------------------------------------
+    rds:
+      engine: postgres
+      engine_version: "17.6"
+      family: postgres17
+      major_engine_version: "17"
+      instance_class: db.t3.medium  # Smaller for single tenant
+      allocated_storage: 50
+      max_allocated_storage: 200
+      storage_type: gp3
+      db_name: app
+      db_username: dbadmin
+      db_port: 5432
+      multi_az: false  # Cost optimization (can be enabled per tenant req)
+      backup_retention_period: 7
+      backup_window: "03:00-04:00"
+      maintenance_window: "Mon:04:00-Mon:05:00"
+      skip_final_snapshot: false
+      storage_encrypted: true
+      deletion_protection: true
+      # Cost optimization
+      performance_insights_enabled: false
+      monitoring_interval: 0  # Disabled for cost savings
+      parameters:
+        - name: log_connections
+          value: "1"
+        - name: log_disconnections
+          value: "1"
+
+    # -------------------------------------------------------------------------
+    # SQS CONFIGURATION
+    # -------------------------------------------------------------------------
+    sqs:
+      queues:
+        - orders
+        - notifications
+        - events
+      visibility_timeout_seconds: 30
+      message_retention_seconds: 1209600
+      receive_wait_time_seconds: 10
+      sqs_managed_sse_enabled: true
+      create_dlq: false
+      dlq_message_retention_seconds: 1209600
+      redrive_max_receive_count: 3
